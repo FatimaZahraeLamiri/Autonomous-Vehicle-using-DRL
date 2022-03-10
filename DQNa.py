@@ -7,11 +7,11 @@ import numpy as np
 import cv2
 import math
 from collections import deque
-from keras.applications.xception import Xception
-from keras.layers import Dense, GlobalAveragePooling2D
+from tensorflow.keras.applications.xception import Xception
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 from tensorflow.keras.optimizers import Adam
-from keras.models import Model
-from keras.callbacks import TensorBoard
+from tensorflow.keras.models import Model
+from tensorflow.keras.callbacks import TensorBoard
 
 import tensorflow as tf
 import tensorflow.keras.backend as backend
@@ -20,7 +20,7 @@ from threading import Thread
 from tqdm import tqdm
 
 try:
-    sys.path.append(glob.glob('../PythonAPI/carla/dist/carla-*%d.%d-%s.egg' % (
+    sys.path.append(glob.glob('f-*%d.%d-%s.egg' % (
         sys.version_info.major,
         sys.version_info.minor,
         'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
@@ -61,7 +61,7 @@ class ModifiedTensorBoard(TensorBoard):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.step = 1
-        self.writer = tf.summary.FileWriter(self.log_dir)
+        self.writer = tf.compat.v1.summary.FileWriter (self.log_dir)
 
     # Overriding this method to stop creating default log writer
     def set_model(self, model):
@@ -96,7 +96,7 @@ class CarEnv:
 
     def __init__(self):
         self.client = carla.Client("localhost", 2000)
-        self.client.set_timeout(2.0)
+        self.client.set_timeout(2000.0)
         self.world = self.client.get_world()
         self.blueprint_library = self.world.get_blueprint_library()
         self.model_3 = self.blueprint_library.filter("model3")[0]
@@ -185,7 +185,7 @@ class DQNAgent:
 
         self.tensorboard = ModifiedTensorBoard(log_dir=f"logs/{MODEL_NAME}-{int(time.time())}")
         self.target_update_counter = 0
-        self.graph = tf.get_default_graph()
+        self.graph = tf.compat.v1.get_default_graph()
 
         self.terminate = False
         self.last_logged_episode = 0
@@ -275,15 +275,14 @@ if __name__ == '__main__':
     FPS = 60
     # For stats
     ep_rewards = [-200]
-
     # For more repetitive results
     random.seed(1)
     np.random.seed(1)
-    tf.random.set_seed(1)
+    tf.compat.v1.set_random_seed(1)
 
     # Memory fraction, used mostly when trai8ning multiple agents
-    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=MEMORY_FRACTION)
-    backend.set_session(tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)))
+    gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=MEMORY_FRACTION)
+    tf.compat.v1.keras.backend.set_session(tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options)))
 
     # Create models folder
     if not os.path.isdir('models'):
@@ -295,6 +294,9 @@ if __name__ == '__main__':
 
 
     # Start training thread and wait for training to be initialized
+    session = tf.compat.v1.keras.backend.get_session()
+    init = tf.global_variables_initializer()
+    session.run(init)
     trainer_thread = Thread(target=agent.train_in_loop, daemon=True)
     trainer_thread.start()
     while not agent.training_initialized:
