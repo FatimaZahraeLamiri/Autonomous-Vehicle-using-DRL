@@ -7,9 +7,27 @@ import tensorflow as tf
 import tensorflow.python.keras.backend as backend
 from tensorflow.keras.models import load_model
 from DQNagent import CarEnv, MEMORY_FRACTION
+import random
 
+MODEL_PATH = 'models/64x4___-56.00max__-75.40avg__-91.00min__1647659506.model'
 
-MODEL_PATH = 'models/Xception____-7.00max__-28.40avg_-205.00min__1647267587.model'
+#I am using this function to print model details for debugging purposes
+def print_total_parameters():
+    total_parameters = 0 
+    for variable in tf.trainable_variables():
+        # shape is an array of tf.Dimension
+        shape = variable.get_shape()
+        variable_parameters = 1 
+        for dim in shape:
+            variable_parameters *= dim.value
+        print('%s  dim=%i shape=%s params=%i' % ( 
+                    variable.name,
+                    len(shape),
+                    shape,
+                    variable_parameters,
+                    ))  
+        total_parameters += variable_parameters
+    print('total_parameters = %i' % (total_parameters))
 
 if __name__ == '__main__':
 
@@ -19,7 +37,7 @@ if __name__ == '__main__':
 
     # Load the model
     model = load_model(MODEL_PATH)
-
+    # print_total_parameters()
     # Create environment
     env = CarEnv()
 
@@ -53,10 +71,13 @@ if __name__ == '__main__':
 
             # Predict an action based on current observation space
             qs = model.predict(np.array(current_state).reshape(-1, *current_state.shape)/255)[0]
-            action = np.argmax(qs)
+            # print(len(qs))
+            qs = [x * 100 for x in qs]
+            winner = np.argwhere(qs == np.amax(qs))
+            action = int(random.choice(winner)[0])
 
             # Step environment (additional flag informs environment to not break an episode by time limit)
-            new_state, reward, done, _ = env.step(action)
+            new_state, reward, done, _ = env.step(1)
 
             # Set current step for next loop iteration
             current_state = new_state
@@ -68,7 +89,7 @@ if __name__ == '__main__':
             # Measure step time, append to a deque, then print mean FPS for last 60 frames, q values and taken action
             frame_time = time.time() - step_start
             fps_counter.append(frame_time)
-            print(f'Agent: {len(fps_counter)/sum(fps_counter):>4.1f} FPS | Action: [{qs[0]:>5.2f}, {qs[1]:>5.2f}, {qs[2]:>5.2f}] {action}')
+            print(f'Agent: {len(fps_counter)/sum(fps_counter):>4.3f} FPS | Action: [{qs[0]:>5.2f}, {qs[1]:>5.2f}, {qs[2]:>5.2f}] {action}')
 
         # Destroy an actor at end of episode
         for actor in env.actor_list:

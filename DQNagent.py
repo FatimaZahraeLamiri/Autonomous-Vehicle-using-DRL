@@ -7,13 +7,11 @@ import numpy as np
 import cv2
 import math
 from collections import deque
-
 from tensorflow.keras.applications.xception import Xception
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+from tensorflow.keras.layers import  Dense, GlobalAveragePooling2D, Input, Concatenate, Conv2D, AveragePooling2D, Activation, Flatten
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.models import Model
+from tensorflow.keras.models import  Sequential,Model
 from tensorflow.keras.callbacks import TensorBoard
-
 import tensorflow as tf
 import tensorflow.python.keras.backend as backend
 #import keras.backend.tensorflow_backend as backend
@@ -42,22 +40,22 @@ MINIBATCH_SIZE = 16
 PREDICTION_BATCH_SIZE = 1
 TRAINING_BATCH_SIZE = MINIBATCH_SIZE // 4
 UPDATE_TARGET_EVERY = 5
-MODEL_NAME = "Xception"
+MODEL_NAME = "64x4"
 
 MEMORY_FRACTION = 0.4
 MIN_REWARD = -200
 
-EPISODES = 3000
+EPISODES = 2000
 
 DISCOUNT = 0.99
 epsilon = 1
-EPSILON_DECAY = 0.998 ## 0.9975 99975
+EPSILON_DECAY = 0.997 ## 0.9975 99975
 MIN_EPSILON = 0.001
 
 AGGREGATE_STATS_EVERY = 10
 
 
-# Own Tensorboard class
+# Tensorboard class
 class ModifiedTensorBoard(TensorBoard):
 
     # Overriding init to set initial step and writer (we want one log file for all .fit() calls)
@@ -65,21 +63,17 @@ class ModifiedTensorBoard(TensorBoard):
         super().__init__(**kwargs)
         self.step = 1
         self.writer = tf.summary.FileWriter(self.log_dir)
-
     # Overriding this method to stop creating default log writer
     def set_model(self, model):
         pass
-
     # Overrided, saves logs with our step number
     # (otherwise every .fit() will start writing from 0th step)
     def on_epoch_end(self, epoch, logs=None):
         self.update_stats(**logs)
-
     # Overrided
     # We train for one batch only, no need to save anything at epoch end
     def on_batch_end(self, batch, logs=None):
         pass
-
     # Overrided, so won't close writer
     def on_train_end(self, _):
         pass
@@ -116,11 +110,9 @@ class CarEnv:
     def reset(self):
         self.collision_hist = []
         self.actor_list = []
-
         self.transform = random.choice(self.world.get_map().get_spawn_points())
         self.vehicle = self.world.spawn_actor(self.model_3, self.transform)
         self.actor_list.append(self.vehicle)
-
         self.rgb_cam = self.blueprint_library.find('sensor.camera.rgb')
         self.rgb_cam.set_attribute("image_size_x", f"{self.im_width}")
         self.rgb_cam.set_attribute("image_size_y", f"{self.im_height}")
@@ -197,28 +189,46 @@ class DQNAgent:
 
         self.tensorboard = ModifiedTensorBoard(log_dir=f"logs/{MODEL_NAME}-{int(time.time())}")
         self.target_update_counter = 0
-        self.graph = tf.get_default_graph()
 
+        self.graph = tf.get_default_graph()
         self.terminate = False
         self.last_logged_episode = 0
         self.training_initialized = False
 
+    # def create_model(self):
+    #     base_model = Xception(weights=None, include_top=False, input_shape=(IM_HEIGHT, IM_WIDTH,3))
+    #     x = base_model.output
+    #     x = GlobalAveragePooling2D()(x)
+    #     predictions = Dense(3, activation="linear")(x)
+    #     model = Model(inputs=base_model.input, outputs=predictions)
+    #     model.compile(loss="mse", optimizer=Adam(lr=0.001), metrics=["accuracy"])
+    #     return model
     def create_model(self):
-        base_model = Xception(weights=None, include_top=False, input_shape=(IM_HEIGHT, IM_WIDTH,3))
+        model = Sequential()
+        model.add(Conv2D(64, (3, 3), input_shape=(IM_HEIGHT, IM_WIDTH, 3), padding='same'))
+        model.add(Activation('relu'))
+        model.add(AveragePooling2D(pool_size=(5, 5), strides=(3, 3), padding='same'))
 
-        x = base_model.output
-        x = GlobalAveragePooling2D()(x)
+        model.add(Conv2D(64, (3, 3), padding='same'))
+        model.add(Activation('relu'))
+        model.add(AveragePooling2D(pool_size=(5, 5), strides=(3, 3), padding='same'))
 
-        predictions = Dense(3, activation="linear")(x)
-        model = Model(inputs=base_model.input, outputs=predictions)
-        model.compile(loss="mse", optimizer=Adam(lr=0.001), metrics=["accuracy"])
+        model.add(Conv2D(64, (3, 3), padding='same'))
+        model.add(Activation('relu'))
+        model.add(AveragePooling2D(pool_size=(5, 5), strides=(3, 3), padding='same'))
+        model.add(Flatten())
+        model.add(Dense(64))
+        model.add(Dense(3, activation='linear'))
+        model.compile(loss="mse", optimizer=Adam(lr=0.001, decay=0.0), metrics=['accuracy'])
         return model
+
 
     def update_replay_memory(self, transition):
         # transition = (current_state, action, reward, new_state, done)
         self.replay_memory.append(transition)
 
     def train(self):
+     
         if len(self.replay_memory) < MIN_REPLAY_MEMORY_SIZE:
             return
 
@@ -253,7 +263,7 @@ class DQNAgent:
         log_this_step = False
         if self.tensorboard.step > self.last_logged_episode:
             log_this_step = True
-            self.last_log_episode = self.tensorboard.step
+            self.last_logged_episode = self.tensorboard.step
 
         with self.graph.as_default():
             backend.set_session(sess)
@@ -325,26 +335,19 @@ if __name__ == '__main__':
     # Iterate over episodes
     for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
         #try:
-
             env.collision_hist = []
-
             # Update tensorboard step every episode
             agent.tensorboard.step = episode
-
             # Restarting episode - reset episode reward and step number
             episode_reward = 0
             step = 1
-
             # Reset environment and get initial state
             current_state = env.reset()
-
             # Reset flag and start iterating until episode ends
             done = False
             episode_start = time.time()
-
             # Play for given number of seconds only
             while True:
-
                 # This part stays mostly the same, the change is to query a model for Q values
                 if np.random.random() > epsilon:
                     # Get action from Q table
@@ -362,7 +365,7 @@ if __name__ == '__main__':
 
                 # Every step we update replay memory
                 agent.update_replay_memory((current_state, action, reward, new_state, done))
-
+                # agent.train(done, step)
                 current_state = new_state
                 step += 1
 
