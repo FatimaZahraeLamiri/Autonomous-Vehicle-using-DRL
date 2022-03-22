@@ -9,7 +9,7 @@ from tensorflow.keras.models import load_model
 from DQNagent import CarEnv, MEMORY_FRACTION
 import random
 
-MODEL_PATH = 'models/64x4___-56.00max__-75.40avg__-91.00min__1647659506.model'
+MODEL_PATH = 'models/Mod64x4___-78.00max_-190.20avg_-269.00min__1647910202.model'
 
 #I am using this function to print model details for debugging purposes
 def print_total_parameters():
@@ -77,7 +77,7 @@ if __name__ == '__main__':
             action = int(random.choice(winner)[0])
 
             # Step environment (additional flag informs environment to not break an episode by time limit)
-            new_state, reward, done, _ = env.step(1)
+            new_state, reward, done, _ = env.step(action)
 
             # Set current step for next loop iteration
             current_state = new_state
@@ -89,7 +89,7 @@ if __name__ == '__main__':
             # Measure step time, append to a deque, then print mean FPS for last 60 frames, q values and taken action
             frame_time = time.time() - step_start
             fps_counter.append(frame_time)
-            print(f'Agent: {len(fps_counter)/sum(fps_counter):>4.3f} FPS | Action: [{qs[0]:>5.2f}, {qs[1]:>5.2f}, {qs[2]:>5.2f}] {action}')
+            print(f'Agent: {len(fps_counter)/sum(fps_counter):>4.3f} FPS | Action: [{qs[0]:>5.2f}, {qs[1]:>5.2f}, {qs[2]:>5.2f}, {qs[3]:>5.2f}, {qs[4]:>5.2f}, {qs[5]:>5.2f},{ qs[6]:>5.2f}, {qs[7]:>5.2f}, {qs[8]:>5.2f}, {qs[9]:>5.2f}, {qs[10]:>5.2f}, {qs[11]:>5.2f}, {qs[12]:>5.2f}, {qs[13]:>5.2f}, {qs[14]:>5.2f}] {action}')
 
         # Destroy an actor at end of episode
         for actor in env.actor_list:

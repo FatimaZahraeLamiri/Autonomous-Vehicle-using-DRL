@@ -14,7 +14,6 @@ from tensorflow.keras.models import  Sequential,Model
 from tensorflow.keras.callbacks import TensorBoard
 import tensorflow as tf
 import tensorflow.python.keras.backend as backend
-#import keras.backend.tensorflow_backend as backend
 from threading import Thread
 global sess
 global graph
@@ -40,16 +39,13 @@ MINIBATCH_SIZE = 16
 PREDICTION_BATCH_SIZE = 1
 TRAINING_BATCH_SIZE = MINIBATCH_SIZE // 4
 UPDATE_TARGET_EVERY = 5
-MODEL_NAME = "64x4"
-
+MODEL_NAME = "Mod64x4"
 MEMORY_FRACTION = 0.4
 MIN_REWARD = -200
-
-EPISODES = 2000
-
-DISCOUNT = 0.99
+EPISODES = 100
+DISCOUNT = 0.95
 epsilon = 1
-EPSILON_DECAY = 0.997 ## 0.9975 99975
+EPSILON_DECAY = 0.95 #0.997  0.9975 99975
 MIN_EPSILON = 0.001
 
 AGGREGATE_STATS_EVERY = 10
@@ -95,7 +91,6 @@ class ModifiedTensorBoard(TensorBoard):
 
 class CarEnv:
     SHOW_CAM = SHOW_PREVIEW
-    STEER_AMT = 1.0
     im_width = IM_WIDTH
     im_height = IM_HEIGHT
     front_camera = None
@@ -144,7 +139,6 @@ class CarEnv:
 
     def process_img(self, image):
         i = np.array(image.raw_data)
-        #print(i.shape)
         i2 = i.reshape((self.im_height, self.im_width, 4))
         i3 = i2[:, :, :3]
         if self.SHOW_CAM:
@@ -154,15 +148,41 @@ class CarEnv:
 
     def step(self, action):
         if action == 0:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-1*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-1))
         elif action == 1:
             self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer= 0))
         elif action == 2:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=1*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=1))
+        elif action == 3:
+             self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-0.5))
+        elif action == 4:
+            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=0.5))
+        elif action == 5:
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=1))
+        elif action == 6:
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=0))
+        elif action == 7:
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=-1))
+        elif action == 8:
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=0.5))
+        elif action == 9:
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=-0.5))
+        elif action == 10:
+            self.vehicle.apply_control(carla.VehicleControl(reverse=True ))
+        elif action == 11:
+            self.vehicle.apply_control(carla.VehicleControl(reverse=True , steer=-0.5))
+        elif action == 12:
+            self.vehicle.apply_control(carla.VehicleControl(reverse=True , steer= 0.5))
+        elif action == 13:
+            self.vehicle.apply_control(carla.VehicleControl(brake=1.0))
+        elif action == 14:
+            self.vehicle.apply_control(carla.VehicleControl(brake=0.5))
+           
 
         v = self.vehicle.get_velocity()
-        kmh = int(3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
 
+        kmh = int(3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
+        
         if len(self.collision_hist) != 0:
             done = True
             reward = -200
@@ -195,14 +215,6 @@ class DQNAgent:
         self.last_logged_episode = 0
         self.training_initialized = False
 
-    # def create_model(self):
-    #     base_model = Xception(weights=None, include_top=False, input_shape=(IM_HEIGHT, IM_WIDTH,3))
-    #     x = base_model.output
-    #     x = GlobalAveragePooling2D()(x)
-    #     predictions = Dense(3, activation="linear")(x)
-    #     model = Model(inputs=base_model.input, outputs=predictions)
-    #     model.compile(loss="mse", optimizer=Adam(lr=0.001), metrics=["accuracy"])
-    #     return model
     def create_model(self):
         model = Sequential()
         model.add(Conv2D(64, (3, 3), input_shape=(IM_HEIGHT, IM_WIDTH, 3), padding='same'))
@@ -218,7 +230,7 @@ class DQNAgent:
         model.add(AveragePooling2D(pool_size=(5, 5), strides=(3, 3), padding='same'))
         model.add(Flatten())
         model.add(Dense(64))
-        model.add(Dense(3, activation='linear'))
+        model.add(Dense(15, activation='linear'))
         model.compile(loss="mse", optimizer=Adam(lr=0.001, decay=0.0), metrics=['accuracy'])
         return model
 
@@ -269,7 +281,6 @@ class DQNAgent:
             backend.set_session(sess)
             self.model.fit(np.array(X)/255, np.array(y), batch_size=TRAINING_BATCH_SIZE, verbose=0, shuffle=False, callbacks=[self.tensorboard] if log_this_step else None)
 
-
         if log_this_step:
             self.target_update_counter += 1
 
@@ -282,7 +293,7 @@ class DQNAgent:
 
     def train_in_loop(self):
         X = np.random.uniform(size=(1, IM_HEIGHT, IM_WIDTH, 3)).astype(np.float32)
-        y = np.random.uniform(size=(1, 3)).astype(np.float32)
+        y = np.random.uniform(size=(1, 15)).astype(np.float32)
         with self.graph.as_default():
             backend.set_session(sess)
             self.model.fit(X,y, verbose=False, batch_size=1)
@@ -328,8 +339,7 @@ if __name__ == '__main__':
     while not agent.training_initialized:
         time.sleep(0.01)
 
-    # Initialize predictions - forst prediction takes longer as of initialization that has to be done
-    # It's better to do a first prediction then before we start iterating over episode steps
+    # Initialize predictions
     agent.get_qs(np.ones((env.im_height, env.im_width, 3)))
 
     # Iterate over episodes
@@ -354,7 +364,7 @@ if __name__ == '__main__':
                     action = np.argmax(agent.get_qs(current_state))
                 else:
                     # Get random action
-                    action = np.random.randint(0, 3)
+                    action = np.random.randint(0, 15)
                     # This takes no time, so we add a delay matching 60 FPS (prediction above takes longer)
                     time.sleep(1/FPS)
 
