@@ -18,6 +18,7 @@ from threading import Thread
 global sess
 global graph
 from tqdm import tqdm
+import math
 
 try:
     sys.path.append(glob.glob('../PythonAPI/carla/dist/carla-*%d.%d-%s.egg' % (
@@ -27,7 +28,6 @@ try:
 except IndexError:
     pass
 import carla
-
 
 SHOW_PREVIEW = False
 IM_WIDTH = 640
@@ -46,12 +46,28 @@ EPISODES = 100
 DISCOUNT = 0.95
 epsilon = 1
 EPSILON_DECAY = 0.95 #0.997  0.9975 99975
-MIN_EPSILON = 0.001
-
+MIN_EPSILON = 0.005
+INCREMENT = 0.5 #0.25    0.2    0.1
 AGGREGATE_STATS_EVERY = 10
+NUMBER_OF_ACTIONS= int((2/INCREMENT + 1 ) * (1 + 1/INCREMENT )) 
 
+def apply_Action(action): 
+
+  Throttle = 0.0
+  Steer    = 0.0
+  Reverse  = False 
+
+  Steer =  INCREMENT * (action % (2/INCREMENT + 1)) - 1
+  
+  if (action < ( 2/INCREMENT +1)* (1/INCREMENT)):
+     Throttle = INCREMENT * (math.floor(action /(2/INCREMENT +1)))+ INCREMENT
+  else :
+    Reverse = True 
+
+  return round(Throttle, 2), round(Steer, 2), Reverse
 
 # Tensorboard class
+
 class ModifiedTensorBoard(TensorBoard):
 
     # Overriding init to set initial step and writer (we want one log file for all .fit() calls)
@@ -145,40 +161,12 @@ class CarEnv:
             cv2.imshow("", i3)
             cv2.waitKey(1)
         self.front_camera = i3
-
+            
     def step(self, action):
-        if action == 0:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-1))
-        elif action == 1:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer= 0))
-        elif action == 2:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=1))
-        elif action == 3:
-             self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-0.5))
-        elif action == 4:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=0.5))
-        elif action == 5:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=1))
-        elif action == 6:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=0))
-        elif action == 7:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=-1))
-        elif action == 8:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=0.5))
-        elif action == 9:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=-0.5))
-        elif action == 10:
-            self.vehicle.apply_control(carla.VehicleControl(reverse=True ))
-        elif action == 11:
-            self.vehicle.apply_control(carla.VehicleControl(reverse=True , steer=-0.5))
-        elif action == 12:
-            self.vehicle.apply_control(carla.VehicleControl(reverse=True , steer= 0.5))
-        elif action == 13:
-            self.vehicle.apply_control(carla.VehicleControl(brake=1.0))
-        elif action == 14:
-            self.vehicle.apply_control(carla.VehicleControl(brake=0.5))
-           
 
+        Throttle, Steer, Reverse = apply_Action(action)
+        self.vehicle.apply_control(carla.VehicleControl(throttle=Throttle, steer=Steer, reverse= Reverse))
+           
         v = self.vehicle.get_velocity()
 
         kmh = int(3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
@@ -200,7 +188,9 @@ class CarEnv:
 
 
 class DQNAgent:
+
     def __init__(self):
+
         self.model = self.create_model()
         self.target_model = self.create_model()
         self.target_model.set_weights(self.model.get_weights())
@@ -216,6 +206,7 @@ class DQNAgent:
         self.training_initialized = False
 
     def create_model(self):
+
         model = Sequential()
         model.add(Conv2D(64, (3, 3), input_shape=(IM_HEIGHT, IM_WIDTH, 3), padding='same'))
         model.add(Activation('relu'))
@@ -230,7 +221,7 @@ class DQNAgent:
         model.add(AveragePooling2D(pool_size=(5, 5), strides=(3, 3), padding='same'))
         model.add(Flatten())
         model.add(Dense(64))
-        model.add(Dense(15, activation='linear'))
+        model.add(Dense(NUMBER_OF_ACTIONS, activation='linear'))
         model.compile(loss="mse", optimizer=Adam(lr=0.001, decay=0.0), metrics=['accuracy'])
         return model
 
@@ -293,7 +284,7 @@ class DQNAgent:
 
     def train_in_loop(self):
         X = np.random.uniform(size=(1, IM_HEIGHT, IM_WIDTH, 3)).astype(np.float32)
-        y = np.random.uniform(size=(1, 15)).astype(np.float32)
+        y = np.random.uniform(size=(1, NUMBER_OF_ACTIONS)).astype(np.float32)
         with self.graph.as_default():
             backend.set_session(sess)
             self.model.fit(X,y, verbose=False, batch_size=1)
@@ -364,7 +355,7 @@ if __name__ == '__main__':
                     action = np.argmax(agent.get_qs(current_state))
                 else:
                     # Get random action
-                    action = np.random.randint(0, 15)
+                    action = np.random.randint(0, NUMBER_OF_ACTIONS)
                     # This takes no time, so we add a delay matching 60 FPS (prediction above takes longer)
                     time.sleep(1/FPS)
 
