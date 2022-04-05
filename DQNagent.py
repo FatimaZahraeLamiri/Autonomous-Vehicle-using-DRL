@@ -169,6 +169,7 @@ class CarEnv:
         location_state.append(veh_rotation.roll)
         
         result= np.array(location_state)
+
         return result.reshape(1, 9)
 
     def collision_data(self, event):
@@ -184,7 +185,6 @@ class CarEnv:
         self.front_camera = i3
 
     def step(self, action):
-        print("action taken",action)
         if action == 0:
             self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-1))
         elif action == 1:
@@ -467,7 +467,7 @@ if __name__ == '__main__':
             current_state2  = env.get_location_state()
             # Reset flag and start iterating until episode ends
             done = False
-            episode_start = time.time()
+            # episode_start = time.time()
             # Play for given number of seconds only
             while True:
                 # This part stays mostly the same, the change is to query a model for Q values
