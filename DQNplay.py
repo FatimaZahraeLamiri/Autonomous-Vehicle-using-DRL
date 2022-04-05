@@ -9,7 +9,7 @@ from tensorflow.keras.models import load_model
 from DQNagent import CarEnv, MEMORY_FRACTION
 import random
 
-MODEL_PATH = 'models/Mod64x4___-78.00max_-190.20avg_-269.00min__1647910202.model'
+MODEL_PATH = 'models/Mod64x4___-83.00max_-149.30avg_-266.00min__1647937636.model'
 
 #I am using this function to print model details for debugging purposes
 def print_total_parameters():
