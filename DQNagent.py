@@ -29,10 +29,10 @@ except IndexError:
     pass
 import carla
 
-SHOW_PREVIEW = False
+
 IM_WIDTH = 640
 IM_HEIGHT = 480
-SECONDS_PER_EPISODE = 10
+SECONDS_PER_EPISODE = 30
 REPLAY_MEMORY_SIZE = 5_000
 MIN_REPLAY_MEMORY_SIZE = 1_000
 MINIBATCH_SIZE = 16
@@ -47,10 +47,14 @@ DISCOUNT = 0.95
 epsilon = 1
 EPSILON_DECAY = 0.95 #0.997  0.9975 99975
 MIN_EPSILON = 0.005
-INCREMENT = 0.5 #0.25    0.2    0.1
+INCREMENT = 0.25 #0.25    0.2    0.1
 AGGREGATE_STATS_EVERY = 10
-NUMBER_OF_ACTIONS= int((2/INCREMENT + 1 ) * (1 + 1/INCREMENT )) 
+SHOW_PREVIEW = False
+NUMBER_OF_ACTIONS= int((2/INCREMENT + 1 ) * (1 + 1/INCREMENT +1 )) 
 
+
+
+#funtion that generates all possible actions for the increment chosen 
 def apply_Action(action): 
 
   Throttle = 0.0
@@ -59,8 +63,8 @@ def apply_Action(action):
 
   Steer =  INCREMENT * (action % (2/INCREMENT + 1)) - 1
   
-  if (action < ( 2/INCREMENT +1)* (1/INCREMENT)):
-     Throttle = INCREMENT * (math.floor(action /(2/INCREMENT +1)))+ INCREMENT
+  if (action < ( 2/INCREMENT + 1)* ((1/INCREMENT) + 1)):
+     Throttle = INCREMENT * (math.floor(action /(2/INCREMENT + 1)))
   else :
     Reverse = True 
 
@@ -89,7 +93,6 @@ class ModifiedTensorBoard(TensorBoard):
     # Overrided, so won't close writer
     def on_train_end(self, _):
         pass
-
     # Custom method for saving own metrics
     # Creates writer, writes custom metrics and closes writer
     def update_stats(self, **stats):
@@ -115,6 +118,7 @@ class CarEnv:
         self.client = carla.Client("localhost", 2000)
         self.client.set_timeout(2000.0)
         self.world = self.client.get_world()
+        self.world= self.client.load_world('town05')
         self.blueprint_library = self.world.get_blueprint_library()
         self.model_3 = self.blueprint_library.filter("model3")[0]
 
@@ -122,8 +126,11 @@ class CarEnv:
         self.collision_hist = []
         self.actor_list = []
         self.transform = random.choice(self.world.get_map().get_spawn_points())
+        self.destination= random.choice(self.world.get_map().get_spawn_points())
         self.vehicle = self.world.spawn_actor(self.model_3, self.transform)
+        self.initialDistance = self.vehicle.get_location().distance(self.destination.location) 
         self.actor_list.append(self.vehicle)
+
         self.rgb_cam = self.blueprint_library.find('sensor.camera.rgb')
         self.rgb_cam.set_attribute("image_size_x", f"{self.im_width}")
         self.rgb_cam.set_attribute("image_size_y", f"{self.im_height}")
@@ -141,7 +148,14 @@ class CarEnv:
         self.colsensor = self.world.spawn_actor(colsensor, transform, attach_to=self.vehicle)
         self.actor_list.append(self.colsensor)
         self.colsensor.listen(lambda event: self.collision_data(event))
+        points_list=self.world.get_map().get_spawn_points()
+        for point in points_list:
+            if self.vehicle.get_location().distance(point.location) < 100:
+                self.destination = point
+                break
 
+        self.initialDistance = self.vehicle.get_location().distance(self.destination.location)
+       
         while self.front_camera is None:
             time.sleep(0.01)
 
@@ -174,7 +188,7 @@ class CarEnv:
         if len(self.collision_hist) != 0:
             done = True
             reward = -200
-        elif kmh < 50:
+        elif kmh < 50 or kmh > 65:
             done = False
             reward = -1
         else:
@@ -221,13 +235,13 @@ class DQNAgent:
         model.add(AveragePooling2D(pool_size=(5, 5), strides=(3, 3), padding='same'))
         model.add(Flatten())
         model.add(Dense(64))
+
         model.add(Dense(NUMBER_OF_ACTIONS, activation='linear'))
         model.compile(loss="mse", optimizer=Adam(lr=0.001, decay=0.0), metrics=['accuracy'])
         return model
 
 
     def update_replay_memory(self, transition):
-        # transition = (current_state, action, reward, new_state, done)
         self.replay_memory.append(transition)
 
     def train(self):
@@ -238,11 +252,13 @@ class DQNAgent:
         minibatch = random.sample(self.replay_memory, MINIBATCH_SIZE)
 
         current_states = np.array([transition[0] for transition in minibatch])/255
+      
         with self.graph.as_default():
             backend.set_session(sess)
             current_qs_list = self.model.predict(current_states, PREDICTION_BATCH_SIZE)
 
         new_current_states = np.array([transition[3] for transition in minibatch])/255
+        
         with self.graph.as_default():
             backend.set_session(sess)
             future_qs_list = self.target_model.predict(new_current_states, PREDICTION_BATCH_SIZE)
