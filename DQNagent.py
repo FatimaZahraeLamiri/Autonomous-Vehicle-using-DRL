@@ -32,7 +32,7 @@ import carla
 
 IM_WIDTH = 640
 IM_HEIGHT = 480
-SECONDS_PER_EPISODE = 30
+SECONDS_PER_EPISODE = 60
 REPLAY_MEMORY_SIZE = 5_000
 MIN_REPLAY_MEMORY_SIZE = 1_000
 MINIBATCH_SIZE = 16
@@ -42,12 +42,12 @@ UPDATE_TARGET_EVERY = 5
 MODEL_NAME = "Mod64x4"
 MEMORY_FRACTION = 0.4
 MIN_REWARD = -200
-EPISODES = 100
-DISCOUNT = 0.95
+EPISODES = 3000
+DISCOUNT = 0.99
 epsilon = 1
-EPSILON_DECAY = 0.95 #0.997  0.9975 99975
+EPSILON_DECAY = 0.998 #0.997  0.9975 99975
 MIN_EPSILON = 0.005
-INCREMENT = 0.25 #0.25    0.2    0.1
+INCREMENT = 0.25   #0.5    0.2    0.1
 AGGREGATE_STATS_EVERY = 10
 SHOW_PREVIEW = False
 NUMBER_OF_ACTIONS= int((2/INCREMENT + 1 ) * (1 + 1/INCREMENT +1 )) 
@@ -70,8 +70,9 @@ def apply_Action(action):
 
   return round(Throttle, 2), round(Steer, 2), Reverse
 
-# Tensorboard class
 
+
+# Tensorboard class
 class ModifiedTensorBoard(TensorBoard):
 
     # Overriding init to set initial step and writer (we want one log file for all .fit() calls)
@@ -142,19 +143,18 @@ class CarEnv:
         self.sensor.listen(lambda data: self.process_img(data))
 
         self.vehicle.apply_control(carla.VehicleControl(throttle=0.0, brake=0.0))
-        time.sleep(4)
 
         colsensor = self.blueprint_library.find("sensor.other.collision")
         self.colsensor = self.world.spawn_actor(colsensor, transform, attach_to=self.vehicle)
         self.actor_list.append(self.colsensor)
         self.colsensor.listen(lambda event: self.collision_data(event))
-        points_list=self.world.get_map().get_spawn_points()
-        for point in points_list:
-            if self.vehicle.get_location().distance(point.location) < 100:
-                self.destination = point
-                break
+        # points_list=self.world.get_map().get_spawn_points()
+        # for point in points_list:
+        #     if self.vehicle.get_location().distance(point.location) < 100:
+        #         self.destination = point
+        #         break
 
-        self.initialDistance = self.vehicle.get_location().distance(self.destination.location)
+        # self.initialDistance = self.vehicle.get_location().distance(self.destination.location)
        
         while self.front_camera is None:
             time.sleep(0.01)
@@ -163,6 +163,44 @@ class CarEnv:
         self.vehicle.apply_control(carla.VehicleControl(throttle=0.0, brake=0.0))
 
         return self.front_camera
+
+    def get_Action_Values(self):
+
+        Q_table = [0 for i in range(NUMBER_OF_ACTIONS)]
+        
+        current_distance = self.vehicle.get_location().distance(self.destination.location)
+
+        New_Location = self.vehicle.get_location()
+        New_Location2 = self.vehicle.get_location()
+        New_Location3 = self.vehicle.get_location()
+
+        x= self.vehicle.get_transform().location.x
+        y= self.vehicle.get_transform().location.y
+        
+        New_Location.x = x + self.vehicle.get_transform().get_forward_vector().x
+        New_Location.y = y + self.vehicle.get_transform().get_forward_vector().y
+        Distance_forward = New_Location.distance(self.destination.location)
+
+        New_Location2.x = x + self.vehicle.get_transform().get_right_vector().x
+        New_Location2.y = y + self.vehicle.get_transform().get_right_vector().y    
+        Distance_right =  New_Location2.distance(self.destination.location)   
+
+        New_Location3.x = x - self.vehicle.get_transform().get_right_vector().x
+        New_Location3.x = y - self.vehicle.get_transform().get_right_vector().y
+        
+        Distance_left = New_Location3.distance(self.destination.location)  
+
+
+        for i in range(NUMBER_OF_ACTIONS):
+            Throttle, Steer, Reverse = apply_Action(i)
+            if (Throttle > 0 and Distance_forward < current_distance):
+                Q_table[i] += 2
+            if (Steer > 0  and Distance_right < current_distance):
+                Q_table[i] += 2
+            if( Steer < 0 and Distance_left < current_distance):
+                Q_table[i] += 2
+        return Q_table
+
 
     def collision_data(self, event):
         self.collision_hist.append(event)
@@ -177,26 +215,34 @@ class CarEnv:
         self.front_camera = i3
             
     def step(self, action):
-
+    
         Throttle, Steer, Reverse = apply_Action(action)
+        # print("action details",Throttle, Steer, Reverse)
+      
         self.vehicle.apply_control(carla.VehicleControl(throttle=Throttle, steer=Steer, reverse= Reverse))
-           
+       
         v = self.vehicle.get_velocity()
-
         kmh = int(3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
         
+        # current_distance = self.vehicle.get_location().distance(self.destination.location)
+        # if (current_distance < 2):
+        #     print("Success")
+        #     done = True
+        #     reward = 0
+            
+        # else:
         if len(self.collision_hist) != 0:
-            done = True
-            reward = -200
-        elif kmh < 50 or kmh > 65:
-            done = False
-            reward = -1
+                done = True
+                reward = -200
+        elif kmh < 45 or kmh > 65:
+                done = False
+                reward = -1
         else:
-            done = False
-            reward = 1
+                done = False
+                reward = 1
 
         if self.episode_start + SECONDS_PER_EPISODE < time.time():
-            done = True
+                done = True
 
         return self.front_camera, reward, done, None
 
@@ -368,7 +414,12 @@ if __name__ == '__main__':
                 # This part stays mostly the same, the change is to query a model for Q values
                 if np.random.random() > epsilon:
                     # Get action from Q table
-                    action = np.argmax(agent.get_qs(current_state))
+                    Q_table = agent.get_qs(current_state)
+                    action = np.argmax(Q_table)
+                    # Q_table2 = env.get_Action_Values()
+                    # sum_table = [ a + b for a, b in zip(Q_table, Q_table2)] 
+                    # action = np.argmax(sum_table)
+
                 else:
                     # Get random action
                     action = np.random.randint(0, NUMBER_OF_ACTIONS)
@@ -399,7 +450,7 @@ if __name__ == '__main__':
                 average_reward = sum(ep_rewards[-AGGREGATE_STATS_EVERY:])/len(ep_rewards[-AGGREGATE_STATS_EVERY:])
                 min_reward = min(ep_rewards[-AGGREGATE_STATS_EVERY:])
                 max_reward = max(ep_rewards[-AGGREGATE_STATS_EVERY:])
-                agent.tensorboard.update_stats(reward_avg=average_reward, reward_min=min_reward, reward_max=max_reward, epsilon=epsilon)
+                agent.tensorboard.update_stats(Reward_AVG=average_reward, Reward_min=min_reward, Reward_max=max_reward, epsilon=epsilon)
 
                 # Save model, but only when min reward is greater or equal a set value
                 if min_reward >= MIN_REWARD:
