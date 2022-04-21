@@ -237,7 +237,7 @@ class CarEnv:
         # else:
         if len(self.collision_hist) != 0:
                 done = True
-                reward = -200
+                reward = -100
         elif kmh < MIN_SPEED or kmh > Max_SPEED:
                 done = False
                 reward = -1
