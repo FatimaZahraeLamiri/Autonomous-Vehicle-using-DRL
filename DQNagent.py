@@ -54,21 +54,24 @@ NUMBER_OF_ACTIONS= int((2/INCREMENT + 1 ) * (1 + 1/INCREMENT +1 ))
 
 
 
-#funtion that generates all possible actions for the increment chosen 
-def apply_Action(action): 
-
+#funtion that generates action parameters for the action  ID 
+def generate_Action(action):
   Throttle = 0.0
   Steer    = 0.0
   Reverse  = False 
-
+  Brake = 0.0    
   Steer =  INCREMENT * (action % (2/INCREMENT + 1)) - 1
   
-  if (action < ( 2/INCREMENT + 1)* ((1/INCREMENT) + 1)):
+  if (action < ( 2/INCREMENT +1)* ((1/INCREMENT)+1)):
      Throttle = INCREMENT * (math.floor(action /(2/INCREMENT + 1)))
-  else :
+  elif (action < (2/INCREMENT + 1 ) * (1/INCREMENT +2) ):
     Reverse = True 
+  else:
+    Steer= 0.0
+    Brake= INCREMENT*(NUMBER_OF_ACTIONS-action) 
+    
+  return round(Throttle, 2), round(Steer, 2), Reverse, round(Brake, 2)
 
-  return round(Throttle, 2), round(Steer, 2), Reverse
 
 
 
@@ -216,10 +219,10 @@ class CarEnv:
             
     def step(self, action):
     
-        Throttle, Steer, Reverse = apply_Action(action)
+        Throttle, Steer, Reverse, Brake = apply_Action(action)
         # print("action details",Throttle, Steer, Reverse)
       
-        self.vehicle.apply_control(carla.VehicleControl(throttle=Throttle, steer=Steer, reverse= Reverse))
+        self.vehicle.apply_control(carla.VehicleControl(throttle=Throttle, steer=Steer, reverse= Reverse, brake= Brake))
        
         v = self.vehicle.get_velocity()
         kmh = int(3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
