@@ -29,7 +29,8 @@ except IndexError:
     pass
 import carla
 
-
+MIN_SPEED= 30
+MAX_SPEED= 60
 IM_WIDTH = 640
 IM_HEIGHT = 480
 SECONDS_PER_EPISODE = 60
@@ -237,7 +238,7 @@ class CarEnv:
         if len(self.collision_hist) != 0:
                 done = True
                 reward = -200
-        elif kmh < 45 or kmh > 65:
+        elif kmh < MIN_SPEED or kmh > Max_SPEED:
                 done = False
                 reward = -1
         else:
