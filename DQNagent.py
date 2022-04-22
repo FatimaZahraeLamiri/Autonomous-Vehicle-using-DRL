@@ -43,8 +43,8 @@ UPDATE_TARGET_EVERY = 5
 MODEL_NAME = "Mod64x4"
 MEMORY_FRACTION = 0.4
 MIN_REWARD = -200
-EPISODES = 3000
-DISCOUNT = 0.99
+EPISODES = 2000
+DISCOUNT = 0.997
 epsilon = 1
 EPSILON_DECAY = 0.998 #0.997  0.9975 99975
 MIN_EPSILON = 0.005
@@ -113,6 +113,7 @@ class ModifiedTensorBoard(TensorBoard):
             self.writer.add_summary(summary, index)
         self.writer.flush()
 
+# environment class
 class CarEnv:
     SHOW_CAM = SHOW_PREVIEW
     im_width = IM_WIDTH
@@ -121,9 +122,9 @@ class CarEnv:
 
     def __init__(self):
         self.client = carla.Client("localhost", 2000)
-        self.client.set_timeout(2000.0)
+        self.client.set_timeout(200.0)
         self.world = self.client.get_world()
-        self.world= self.client.load_world('town05')
+        #self.world= self.client.load_world('town04')
         self.blueprint_library = self.world.get_blueprint_library()
         self.model_3 = self.blueprint_library.filter("model3")[0]
 
