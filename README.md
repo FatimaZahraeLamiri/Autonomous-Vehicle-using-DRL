@@ -1,4 +1,3 @@
- Autonomous-Vehicle-using-RL
+ Autonomous-Vehicle-using-DRL
  
- Building an antonomous car as DQN agent 
  
